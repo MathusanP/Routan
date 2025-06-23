@@ -47,7 +47,7 @@ module.exports = {
 
             embed.addFields({
                 name: '🟡 __Major Alerts__',
-                value: bannerText,
+                value: `\`${bannerText}\``,
             });
 
             // Section: Tube Disruptions
@@ -67,8 +67,13 @@ module.exports = {
 
             embed.addFields({
                 name: '🚇 __Tube Disruptions__',
-                value: disruptionText,
+                value: `\`\`${disruptionText}\`\``,
             });
+
+            embed.setFooter({
+                text: 'Data provided by Transport for London (TfL)',
+            });
+
 
             await interaction.followUp({ embeds: [embed] });
 
