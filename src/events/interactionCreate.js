@@ -43,12 +43,22 @@ module.exports = {
 
 		/* Handle Select Menus */
 		if (interaction.isStringSelectMenu()) {
-			if (interaction.customId === 'stationSelect') {
+			const customId = interaction.customId;
+
+			if (customId === 'stationSelect') {
 				const stationCommand = client.commands.get('station');
 				if (stationCommand?.handleSelectMenu) {
 					await stationCommand.handleSelectMenu(interaction);
 				}
 			}
+
+			else if (customId === 'nextTrainSelect') {
+				const trainCommand = client.commands.get('nexttrain');
+				if (trainCommand?.handleSelectMenu) {
+					await trainCommand.handleSelectMenu(interaction);
+				}
+			}
 		}
+
 	}
 };
