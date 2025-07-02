@@ -16,64 +16,66 @@ module.exports = {
     error: false,
     execute: async ({ interaction, client }) => {
         try {
-            // Fetch banner alerts
-            const bannerRes = await fetch('https://api.tfl.gov.uk/status/yellowbannermessages', {
+            // Fetch current line status (real-time disruptions)
+            const statusRes = await fetch(`https://api.tfl.gov.uk/Line/Mode/tube/Status?app_key=${process.env.tflapi}`, {
                 headers: {
-                    'Cache-Control': 'no-cache',
-                    'app_key': process.env.tflapi,
+                    'Cache-Control': 'no-cache'
                 },
             });
-            const bannerData = await bannerRes.json();
+            const statusData = await statusRes.json();
 
-            // Fetch tube disruptions
-            const disruptionRes = await fetch('https://api.tfl.gov.uk/Line/Mode/tube/Disruption', {
+            // Filter lines with actual disruptions (statusSeverity != 10)
+            const disruptedLines = statusData.filter(line =>
+                line.lineStatuses.some(status => status.statusSeverity !== 10)
+            );
+
+            // Build embed
+            const embed = new EmbedBuilder()
+                .setTitle('🚇 TfL Service Status')
+                .setColor(disruptedLines.length ? 'Yellow' : 'Green')
+                .setTimestamp();
+
+            // Section: Major Alerts (formerly yellow banner)
+            const majorAlertsText = disruptedLines.length
+                ? disruptedLines.map(line => {
+                    const reason = line.lineStatuses
+                        .find(status => status.statusSeverity !== 10 && status.reason)?.reason || 'No detailed reason.';
+                    return `${line.name}: ${reason}`;
+                }).join('\n\n').slice(0, 1024)
+                : '✅ No major alerts at this time.';
+
+            embed.addFields({
+                name: '❗ __Alerts__',
+                value: `\`\`\`${majorAlertsText}\`\`\``,
+            });
+
+            // Section: Planned works / tube disruptions
+            const disruptionRes = await fetch(`https://api.tfl.gov.uk/Line/Mode/tube/Disruption?app_key=${process.env.tflapi}`, {
                 headers: {
-                    'Cache-Control': 'no-cache',
-                    'app_key': process.env.tflapi,
+                    'Cache-Control': 'no-cache'
                 },
             });
             const disruptions = await disruptionRes.json();
 
-            // Build embed
-            const embed = new EmbedBuilder()
-                .setTitle('🚦 TfL Service Status')
-                .setColor(disruptions.length || (bannerData.messages?.length ?? 0) ? 'Yellow' : 'Green')
-                .setTimestamp();
-
-            // Section: Banner Alerts
-            const bannerText = bannerData.messages?.length
-                ? bannerData.messages.map(msg => `• ${msg.message}`).join('\n').slice(0, 1024)
-                : '✅ No major alerts at this time.';
-
-            embed.addFields({
-                name: '🟡 __Major Alerts__',
-                value: `\`${bannerText}\``,
-            });
-
-            // Section: Tube Disruptions
             const disruptionText = disruptions.length
                 ? Array.from(
                     new Map(
                         disruptions.map(d => {
                             const desc = d.description?.replace(/\s+/g, ' ').trim() ?? 'No description';
-
-                            // Key: line + desc to avoid duplicates
-                            return [`${desc}`, `${desc}`];
+                            return [desc, desc];
                         })
                     ).values()
                 ).join('\n\n').slice(0, 1024)
                 : '✅ No tube disruptions at this time.';
 
-
             embed.addFields({
-                name: '🚇 __Tube Disruptions__',
-                value: `\`\`${disruptionText}\`\``,
+                name: '🚦 __Current Disruptions__',
+                value: `\`\`\`${disruptionText}\`\`\``,
             });
 
             embed.setFooter({
                 text: 'Data provided by Transport for London (TfL)',
             });
-
 
             await interaction.followUp({ embeds: [embed] });
 
