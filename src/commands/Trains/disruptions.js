@@ -16,7 +16,6 @@ module.exports = {
     error: false,
     execute: async ({ interaction, client }) => {
         try {
-            // Fetch current line status (real-time disruptions)
             const statusRes = await fetch(`https://api.tfl.gov.uk/Line/Mode/tube/Status?app_key=${process.env.tflapi}`, {
                 headers: {
                     'Cache-Control': 'no-cache'
@@ -24,12 +23,11 @@ module.exports = {
             });
             const statusData = await statusRes.json();
 
-            // Filter lines with actual disruptions (statusSeverity != 10)
+           
             const disruptedLines = statusData.filter(line =>
                 line.lineStatuses.some(status => status.statusSeverity !== 10)
             );
 
-            // Build embed
             const embed = new EmbedBuilder()
                 .setTitle('🚇 TfL Service Status')
                 .setColor(disruptedLines.length ? 'Yellow' : 'Green')
