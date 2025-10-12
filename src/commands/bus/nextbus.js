@@ -43,14 +43,15 @@ module.exports = {
             }
 
             const stopOptions = stopsData.stopPoints
-            console.log(stopOptions)
                 .sort((a, b) => a.distance - b.distance)
                 .slice(0, 5)
                 .map(stop => ({
-                    label: `${stop.commonName} (${stop.stopLetter || "No letter"})`,
+                    label: `${stop.commonName} (${stop.stopLetter})`,
                     description: `${Math.round(stop.distance)}m away`,
                     value: stop.id
                 }));
+
+
 
             const selectMenu = new StringSelectMenuBuilder()
                 .setCustomId('select_bus_stop')
@@ -90,8 +91,15 @@ module.exports = {
                     .slice(0, 5)
                     .map(bus => `• **${bus.lineName}** to *${bus.destinationName}* — arriving in **${Math.round(bus.timeToStation / 60)} min**`);
 
+                const selectedStop = stopsData.stopPoints.find(stop => stop.id === stopId);
+
+                const stopLetter = selectedStop?.stopLetter || selectedStop?.indicator?.replace(/^Stop\s+/i, "") || null;
+                const stopName = selectedStop?.commonName || arrivals[0].stationName;
+
                 const embed = new EmbedBuilder()
-                    .setTitle(`🚌 Next buses at ${arrivals[0].stationName} (${arrivals[0].stopLetter || "No letter"})`)
+                    .setTitle(stopLetter
+                        ? `🚌 Next buses at ${stopName} (${stopLetter})`
+                        : `🚌 Next buses at ${stopName}`)
                     .setDescription(sortedArrivals.join('\n'))
                     .setColor(0x4caf50)
                     .setFooter({ text: 'Data from TfL' })
