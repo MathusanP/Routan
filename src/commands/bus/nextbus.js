@@ -1,4 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const proj4 = require('proj4');
+
+// Define British national grid projection
+proj4.defs("EPSG:27700",
+  "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 " +
+  "+x_0=400000 +y_0=-100000 +ellps=airy " +
+  "+towgs84=446.448,-125.157,542.06,0.1502,0.247,0.8421,-20.4894 " +
+  "+units=m +no_defs"
+);
 
 module.exports = {
     name: 'nextbus',
@@ -24,16 +33,34 @@ module.exports = {
         const locationQuery = interaction.options.getString('location');
 
         try {
-            const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1`, {
-                headers: { 'User-Agent': `bus-times (${process.env.email})` }
-            });
+            const tflSearchRes = await fetch(`https://api.tfl.gov.uk/StopPoint/Search?query=${encodeURIComponent(locationQuery)}&modes=bus&app_key=${process.env.tflapi}`);
+            const tflSearchData = await tflSearchRes.json();
 
-            const geoData = await geoRes.json();
-            if (!geoData.length) {
-                return interaction.editReply({ content: `🚫 Could not find location **${locationQuery}**.` });
+            let lat, lon;
+
+            if (tflSearchData.matches && tflSearchData.matches.length > 0) {
+                const matchId = tflSearchData.matches[0].id;
+                const stopInfoRes = await fetch(`https://api.tfl.gov.uk/StopPoint/${matchId}?app_key=${process.env.tflapi}`);
+                const stopInfo = await stopInfoRes.json();
+
+                if (stopInfo.lat && stopInfo.lon) {
+                    lat = stopInfo.lat;
+                    lon = stopInfo.lon;
+                }
             }
 
-            const { lat, lon } = geoData[0];
+            if (!lat || !lon) {
+                const geoRes = await fetch(`https://api.os.uk/search/names/v1/find?query=${encodeURIComponent(locationQuery)}&key=${process.env.osApi}`);
+                const geoData = await geoRes.json();
+                console.log(geoData);
+
+                if (!geoData.results) {
+                    return interaction.editReply({ content: `🚫 Could not find location **${locationQuery}**.` });
+                }
+
+                const entry = geoData.results[0].GAZETTEER_ENTRY;
+                [lon, lat] = proj4('EPSG:27700', 'EPSG:4326', [entry.GEOMETRY_X, entry.GEOMETRY_Y]);
+            }
 
             const stopsRes = await fetch(`https://api.tfl.gov.uk/StopPoint?lat=${lat}&lon=${lon}&stopTypes=NaptanPublicBusCoachTram&radius=300&app_key=${process.env.tflapi}`);
             const stopsData = await stopsRes.json();
@@ -46,12 +73,10 @@ module.exports = {
                 .sort((a, b) => a.distance - b.distance)
                 .slice(0, 5)
                 .map(stop => ({
-                    label: `${stop.commonName} (${stop.stopLetter})`,
+                    label: `${stop.commonName} (${stop.stopLetter || '?'})`,
                     description: `${Math.round(stop.distance)}m away`,
                     value: stop.id
                 }));
-
-
 
             const selectMenu = new StringSelectMenuBuilder()
                 .setCustomId('select_bus_stop')
@@ -72,8 +97,6 @@ module.exports = {
             });
 
             collector.on('collect', async selectInteraction => {
-                await selectInteraction.deferUpdate();
-
                 const stopId = selectInteraction.values[0];
 
                 const arrivalsRes = await fetch(`https://api.tfl.gov.uk/StopPoint/${stopId}/Arrivals?app_key=${process.env.tflapi}`);
@@ -92,7 +115,6 @@ module.exports = {
                     .map(bus => `• **${bus.lineName}** to *${bus.destinationName}* — arriving in **${Math.round(bus.timeToStation / 60)} min**`);
 
                 const selectedStop = stopsData.stopPoints.find(stop => stop.id === stopId);
-
                 const stopLetter = selectedStop?.stopLetter || selectedStop?.indicator?.replace(/^Stop\s+/i, "") || null;
                 const stopName = selectedStop?.commonName || arrivals[0].stationName;
 
@@ -102,7 +124,7 @@ module.exports = {
                         : `🚌 Next buses at ${stopName}`)
                     .setDescription(sortedArrivals.join('\n'))
                     .setColor(0x4caf50)
-                    .setFooter({ text: 'Data from TfL' })
+                    .setFooter({ text: 'Data provided by TFL and OS Maps.' })
                     .setTimestamp();
 
                 await interaction.editReply({
