@@ -15,6 +15,21 @@ module.exports = {
 
     error: false,
     execute: async ({ interaction, client }) => {
+        function textSplit(text, maxLength = 1024) {
+            const chunks = [];
+            let current = text;
+
+            while (current.length > maxLength) {
+                let sliceIndex = current.lastIndexOf('\n', maxLength);
+                if (sliceIndex === -1) sliceIndex = maxLength;
+                chunks.push(current.slice(0, sliceIndex));
+                current = current.slice(sliceIndex).trim();
+
+            }
+            if (current.length) chunks.push(current);
+            return chunks
+        }
+
         try {
             const statusRes = await fetch(`https://api.tfl.gov.uk/Line/Mode/tube/Status?app_key=${process.env.tflapi}`, {
                 headers: {
@@ -23,7 +38,7 @@ module.exports = {
             });
             const statusData = await statusRes.json();
 
-           
+
             const disruptedLines = statusData.filter(line =>
                 line.lineStatuses.some(status => status.statusSeverity !== 10)
             );
@@ -33,19 +48,22 @@ module.exports = {
                 .setColor(disruptedLines.length ? 'Yellow' : 'Green')
                 .setTimestamp();
 
-            // Section: Major Alerts (formerly yellow banner)
-            const majorAlertsText = disruptedLines.length
+            // Section: Major Alerts 
+            const majorAlerts = disruptedLines.length
                 ? disruptedLines.map(line => {
-                    const reason = line.lineStatuses
-                        .find(status => status.statusSeverity !== 10 && status.reason)?.reason || 'No detailed reason.';
+                    const reason = line.lineStatuses.find(s => s.statusSeverity !== 10 && s.reason)?.reason || 'No detailed reason.';
                     return `${line.name}: ${reason}`;
-                }).join('\n\n').slice(0, 1024)
+                }).join('\n\n')
                 : '✅ No major alerts at this time.';
 
-            embed.addFields({
-                name: '❗ __Alerts__',
-                value: `\`\`\`${majorAlertsText}\`\`\``,
+            const majorAlertChunks = textSplit(majorAlerts);
+            majorAlertChunks.forEach((chunk, i) => {
+                embed.addFields({
+                    name: i === 0 ? '❗ __Alerts__' : '❗ __Alerts__ (cont.)',
+                    value: `\`\`\`${chunk}\`\`\``,
+                });
             });
+
 
             // Section: Planned works / tube disruptions
             const disruptionRes = await fetch(`https://api.tfl.gov.uk/Line/Mode/tube/Disruption?app_key=${process.env.tflapi}`, {
