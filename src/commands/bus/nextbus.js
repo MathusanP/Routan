@@ -33,16 +33,17 @@ module.exports = {
                 return interaction.editReply({ content: `🚫 Could not find location **${locationQuery}**.` });
             }
 
-            const { lat, lon, display_name } = geoData[0];
+            const { lat, lon } = geoData[0];
 
             const stopsRes = await fetch(`https://api.tfl.gov.uk/StopPoint?lat=${lat}&lon=${lon}&stopTypes=NaptanPublicBusCoachTram&radius=300&app_key=${process.env.tflapi}`);
             const stopsData = await stopsRes.json();
 
             if (!stopsData.stopPoints || stopsData.stopPoints.length === 0) {
-                return interaction.editReply({ content: `🚫 No nearby bus stops found at **${display_name}**.` });
+                return interaction.editReply({ content: `🚫 No nearby bus stops found at **${locationQuery}**.` });
             }
 
             const stopOptions = stopsData.stopPoints
+            console.log(stopOptions)
                 .sort((a, b) => a.distance - b.distance)
                 .slice(0, 5)
                 .map(stop => ({
@@ -59,7 +60,7 @@ module.exports = {
             const row = new ActionRowBuilder().addComponents(selectMenu);
 
             await interaction.editReply({
-                content: `🚌 Select a stop near **${display_name}**:`,
+                content: `🚌 Select a stop near **${locationQuery}**:`,
                 components: [row]
             });
 
