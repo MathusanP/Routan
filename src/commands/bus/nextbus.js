@@ -1,15 +1,28 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+const mysql = require('mysql2');
 
 // Needed to convert between British National Grid to Lon and Lat.
 const proj4 = require('proj4');
 
 // Define British national grid projection
 proj4.defs("EPSG:27700",
-  "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 " +
-  "+x_0=400000 +y_0=-100000 +ellps=airy " +
-  "+towgs84=446.448,-125.157,542.06,0.1502,0.247,0.8421,-20.4894 " +
-  "+units=m +no_defs"
+    "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 " +
+    "+x_0=400000 +y_0=-100000 +ellps=airy " +
+    "+towgs84=446.448,-125.157,542.06,0.1502,0.247,0.8421,-20.4894 " +
+    "+units=m +no_defs"
 );
+
+
+const pool = mysql.createPool({
+    host: process.env.dbHost,
+    user: process.env.dbUser,
+    password: process.env.dbPassword,
+    database: process.env.db,
+    waitForConnections: true,
+    connectionLimit: 10
+});
+
 
 module.exports = {
     name: 'nextbus',
@@ -84,7 +97,7 @@ module.exports = {
                     description: `${Math.round(stop.distance)}m away`,
                     value: stop.id
                 }));
-            
+
             // Creating a select menu
             const selectMenu = new StringSelectMenuBuilder()
                 .setCustomId('select_bus_stop')
@@ -92,7 +105,7 @@ module.exports = {
                 .addOptions(stopOptions);
 
             const row = new ActionRowBuilder().addComponents(selectMenu);
-            
+
             // Requesting user input
             await interaction.editReply({
                 content: `🚌 Select a stop near **${locationQuery}**:`,
@@ -129,8 +142,18 @@ module.exports = {
                 const selectedStop = stopsData.stopPoints.find(stop => stop.id === stopId);
                 const stopLetter = selectedStop?.stopLetter || selectedStop?.indicator?.replace(/^Stop\s+/i, "") || null;
                 const stopName = selectedStop?.commonName || arrivals[0].stationName;
+    
 
-                
+                const user = interaction.user.id
+
+                const favouriteButton = new ButtonBuilder()
+                    .setCustomId(`favStop:${stopId}:${user}`)
+                    .setLabel('Favourite')
+                    .setStyle(ButtonStyle.Success);
+
+                const actionRow = new ActionRowBuilder().addComponents(favouriteButton);  
+
+
                 // Creating the embed
                 const embed = new EmbedBuilder()
                     .setTitle(stopLetter
@@ -144,10 +167,12 @@ module.exports = {
                 await interaction.editReply({
                     content: null,
                     embeds: [embed],
-                    components: []
+                    components: [actionRow]
                 });
+                
             });
 
+            
             // If user takes too long
             collector.on('end', collected => {
                 if (collected.size === 0) {
@@ -157,7 +182,7 @@ module.exports = {
                     });
                 }
             });
-        // Error handling
+            // Error handling
         } catch (error) {
             console.error(error);
             await interaction.editReply({ content: '❌ Failed to fetch bus stop data. Please try again later.', components: [] });
